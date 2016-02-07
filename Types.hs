@@ -1,9 +1,11 @@
 module Types (
   Type,
-  deriveType,
   getType,
-  showType
+  showType,
+  showVal
 ) where
+
+import Data.Char
 
 -- The "Type" type class encapsulates LLVM types.
 -- The types are defined in this way instead of as a data type enumeration so
@@ -12,20 +14,22 @@ module Types (
 -- as this type class in addition to the definitions of "Code"s provides a sort
 -- of weak dependent typing.
 
-class Type a where
+class Show a => Type a where
   showType :: a -> String
-  getType :: a
-  deriveType :: d a -> a
-  deriveType _ = getType
+  showVal :: a -> String
+  getType :: Type a => a
   
 instance Type Bool where
   showType _ = "i1"
+  showVal = map toLower . show
   getType = True
 
 instance Type Int where
   showType _ = "i32"
+  showVal = show
   getType = 0
 
 instance Type () where
   showType _ = "void"
+  showVal _ = "voidVal"
   getType = ()
