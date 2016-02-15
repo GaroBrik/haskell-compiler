@@ -8,8 +8,9 @@ module LLVMRepresentation (
   Module(MkModule), decls, globals,
   AnyGlobal(MkAnyGlobal),
   Global(MkFunction), name, ret, body, args,
-  Node(MkBinOp, MkConst, MkBlock, MkIf, MkInstr, MkRet, MkLabel),
-  Op(Plus, Times, Minus, Div),
+  Node(MkArithOp, MkComp, MkConst, MkBlock, MkIf, MkInstr, MkRet, MkLabel),
+  ArithOp(Plus, Times, Minus, Div),
+  Cond(Eq, Ne, Sgt, Sge, Slt, Sle),
   Code(MkCode), node, result,
   AnyCode(MkAnyCode),
   InstrArg(MkVal, MkId), Identifier,
@@ -38,10 +39,12 @@ data TypeString where
 showAsArg :: TypeString -> String
 showAsArg (MkTypeString tpe nme) = nme ++ " " ++ showType tpe
 
-data Op = Plus | Times | Minus | Div deriving (Show, Eq)
+data ArithOp = Plus | Times | Minus | Div deriving (Show, Eq)
+data Cond = Eq | Ne | Sgt | Sge | Slt | Sle deriving (Show, Eq)
 
 data Node a where
-  MkBinOp :: Type a => Code a -> Op -> Code a -> Node a
+  MkArithOp :: Type a => Code a -> ArithOp -> Code a -> Node a
+  MkComp :: Type a => Code a -> Cond -> Code a -> Node Bool
   MkConst :: Type a => a -> Node a
   MkBlock :: Type a => [AnyCode] -> Code a -> Node a
   MkIf :: Type a => (Code Bool) -> (Code a) -> (Code a) -> (Node a)

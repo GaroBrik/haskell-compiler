@@ -5,7 +5,7 @@ module CodeBuilders (
   buildCode,
   CodeBuilder,
   getId,
-  mkBinOp, mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad,
+  mkArithOp, mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad, mkComp,
   mkVoidCode
 ) where
 
@@ -24,11 +24,25 @@ buildCode nme nod = do
   idn <- getId nme
   return (MkCode { node = nod, result = idn })
 
-showTypedOp :: Type a => a -> Op -> String
-showTypedOp a Plus = printf "%s %s" "add" (showType a)
-showTypedOp a Times = printf "%s %s" "mul" (showType a)
-showTypedOp a Minus = printf "%s %s" "sub" (showType a)
-showTypedOp a Div = printf "%s %s" "div" (showType a)
+showOp :: ArithOp -> String
+showOp Plus = "add"
+showOp Times = "mul"
+showOp Minus = "sub"
+showOp Div = "div"
+
+showTypedOp :: Type a => a -> ArithOp -> String
+showTypedOp a op = printf "%s %s" (showOp op) (showType a)
+
+showCond :: Cond -> String
+showCond Eq = "eq"
+showCond Ne = "ne"
+showCond Sgt = "sgt"
+showCond Sge = "sge"
+showCond Slt = "slt"
+showCond Sle = "sle"
+
+showTypedCond :: Type a => a -> Cond -> String
+showTypedCond a cond = printf "icmp %s %s" (showCond cond) (showType a)
 
 showInstrArg :: InstrArg a -> String
 showInstrArg (MkVal v) = showVal v
@@ -37,11 +51,19 @@ showInstrArg (MkId str) = '%':str
 mkVoidCode :: Node () -> Code ()
 mkVoidCode n = MkCode { node = n, result = "" }
 
-mkBinOp :: forall a b c. (Type a, Type b, Type c) =>
-           Identifier -> Op -> InstrArg b -> InstrArg c -> Node a
-mkBinOp res op arg1 arg2 = MkInstr $
+mkArithOp :: forall a b c. (Type a, Type b, Type c) =>
+           Identifier -> ArithOp -> InstrArg b -> InstrArg c -> Node a
+mkArithOp res op arg1 arg2 = MkInstr $
   printf  "%%%s = %s %s, %s" res
                              (showTypedOp (getType::a) op)
+                             (showInstrArg arg1)
+                             (showInstrArg arg2)
+
+mkComp :: forall a. Type a =>
+           Identifier -> Cond -> InstrArg a -> InstrArg a -> Node Bool
+mkComp res cond arg1 arg2 = MkInstr $
+  printf  "%%%s = %s %s, %s" res
+                             (showTypedCond (getType::a) cond)
                              (showInstrArg arg1)
                              (showInstrArg arg2)
 
