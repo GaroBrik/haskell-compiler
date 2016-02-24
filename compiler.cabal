@@ -19,7 +19,11 @@ executable compiler
   main-is:             Main.hs
   -- other-modules:       
   other-extensions:    RankNTypes, ScopedTypeVariables, StandaloneDeriving, GADTs, FlexibleContexts, Rank2Types, ImpredicativeTypes
-  build-depends:       base == 4.*, process >=1.1 && <1.2, mtl >=2.1 && <2.2
+  build-depends:       QuickCheck >= 2.6
+                     , base == 4.*
+                     , mtl >=2.1 && <2.2
+                     , process >=1.1 && <1.2
+                     , random >= 1.0.1.1
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -28,5 +32,8 @@ test-suite spec
   type:                exitcode-stdio-1.0
   ghc-options:         -Wall
   hs-source-dirs:      test
-  build-depends:       base == 4.*, hspec == 2.*
+  build-depends:       QuickCheck >= 2.6
+                     , base == 4.*
+                     , hspec == 2.*
+                     , random >= 1.0.1.1
   default-language:    Haskell2010

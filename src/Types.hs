@@ -4,15 +4,14 @@
 {-# LANGUAGE GADTs #-}
 
 module Types (
-  Type,
-  getType,
-  showType,
-  showVal,
-  hasResult,
+  Type, getType, showType, hasResult,
+  Primitive, showVal, readVal,
   Pointer(MkPointer)
 ) where
 
 import Data.Char
+import System.Random
+import Test.QuickCheck
 
 -- The "Type" type class encapsulates LLVM types.
 -- The types are defined in this way instead of as a data type enumeration so
@@ -23,32 +22,46 @@ import Data.Char
 
 class (Show a, Eq a) => Type a where
   showType :: a -> String
-  showVal :: a -> String
   getType :: Type a => a
   hasResult :: a -> Bool
-  
+
+class Type a => NonVoid a where
+
+class (Arbitrary a, NonVoid a) => Primitive a where
+  showVal :: a -> String
+  readVal :: String -> a
+
+class (Integral a, Primitive a) => Arith a where
+
 instance Type Bool where
   showType _ = "i1"
-  showVal = map toLower . show
   getType = True
   hasResult _ = True
+instance NonVoid Bool
+instance Primitive Bool where
+  showVal = map toLower . show
+  readVal = read
 
 instance Type Int where
   showType _ = "i32"
-  showVal = show
   getType = 0
   hasResult _ = True
+instance Primitive Int where
+  showVal = show
+  readVal = read
+instance NonVoid Int where
+instance Arith Int where
 
 instance Type () where
   showType _ = "void"
-  showVal _ = "voidVal"
   getType = ()
   hasResult _ = False
 
 newtype Pointer a = MkPointer a deriving (Eq, Show)
 
-instance forall a. Type a => Type (Pointer a) where
+instance forall a. NonVoid a => Type (Pointer a) where
   showType (MkPointer a) = '*':showType a
-  showVal _ = error "show value of pointer"
   getType = MkPointer (getType :: a)
   hasResult _ = True
+
+instance forall a. NonVoid a => NonVoid (Pointer a) where

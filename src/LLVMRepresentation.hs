@@ -8,7 +8,7 @@ module LLVMRepresentation (
   Module(MkModule), decls, globals,
   AnyGlobal(MkAnyGlobal),
   Global(MkFunction), name, ret, body, args,
-  Node(MkArithOp, MkComp, MkConst, MkBlock, MkIf, MkInstr, MkRet, MkLabel),
+  Node(ArithOp, Comp, Const, Block, If, Instr, Ret, Label),
   ArithOp(Plus, Times, Minus, Div),
   Cond(Eq, Ne, Sgt, Sge, Slt, Sle),
   Code(MkCode), node, result,
@@ -19,8 +19,9 @@ module LLVMRepresentation (
 ) where
 
 import Types
+import Test.QuickCheck
 
-type Identifier = String
+type Identifier = IORef String
 
 data Module = MkModule { decls :: [String],
                          globals :: [AnyGlobal] }
@@ -43,14 +44,14 @@ data ArithOp = Plus | Times | Minus | Div deriving (Show, Eq)
 data Cond = Eq | Ne | Sgt | Sge | Slt | Sle deriving (Show, Eq)
 
 data Node a where
-  MkArithOp :: Type a => Code a -> ArithOp -> Code a -> Node a
-  MkComp :: Type a => Code a -> Cond -> Code a -> Node Bool
-  MkConst :: Type a => a -> Node a
-  MkBlock :: Type a => [AnyCode] -> Code a -> Node a
-  MkIf :: Type a => (Code Bool) -> (Code a) -> (Code a) -> (Node a)
-  MkInstr :: Type a => String -> Node a
-  MkRet :: Type a => Code a -> Node a
-  MkLabel :: Node a
+  ArithOp :: Primitive a => Code a -> ArithOp -> Code a -> Node a
+  Comp :: Primitive a => Code a -> Cond -> Code a -> Node Bool
+  Const :: Primitive a => a -> Node a
+  Block :: Type a => [AnyCode] -> Code a -> Node a
+  If :: Type a => (Code Bool) -> (Code a) -> (Code a) -> (Node a)
+  Instr :: Type a => String -> Node a
+  Ret :: Type a => Code a -> Node ()
+  Label :: Node ()
 deriving instance Show (Node a)
 
 data Code a where
