@@ -1,21 +1,18 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module LLVMRepresentation (
   Module(MkModule), decls, globals,
   AnyGlobal(MkAnyGlobal),
   Global(MkFunction), name, ret, body, args,
-  Node(ArithOp, Comp, Const, Block, If, Instr, Ret, Label),
+  Node(Const, Block, Instr, Label),
   ArithOp(Plus, Times, Minus, Div),
   Cond(Eq, Ne, Sgt, Sge, Slt, Sle),
-  Code(MkCode), node, result,
-  AnyCode(MkAnyCode),
+  AnyNode(..),
   InstrArg(MkVal, MkId), Identifier,
-  showAsArg,
-  mapNode, mapAny, appAny
+  showAsArg
 ) where
 
 import Types
@@ -59,8 +56,9 @@ instance Show AnyNode where
 
 getResult :: NonVoid a => Node a -> Identifier
 getResult (Const val) = showVal val
-getResult (Block nodes node) = getResult node
-getResult (Instr str id) = id
+getResult (Block _ node) = getResult node
+getResult (Instr _ str) = str
+getResult _ = undefined
 
 data InstrArg a where
   MkVal :: Type a => a -> InstrArg a
