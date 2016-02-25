@@ -6,11 +6,11 @@
 module Types (
   Type, getType, showType, hasResult,
   Primitive, showVal, readVal,
+  NonVoid, Arith,
   Pointer(MkPointer)
 ) where
 
 import Data.Char
-import System.Random
 import Test.QuickCheck
 
 -- The "Type" type class encapsulates LLVM types.

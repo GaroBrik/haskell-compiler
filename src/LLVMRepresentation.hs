@@ -20,8 +20,9 @@ module LLVMRepresentation (
 
 import Types
 import Test.QuickCheck
-
-type Identifier = IORef String
+newtype Identifier = Identifier String
+instance Show Identifier where
+  show (Identifier str) = str
 
 data Module = MkModule { decls :: [String],
                          globals :: [AnyGlobal] }
@@ -33,44 +34,34 @@ data Global a where
   MkFunction :: Type a => { name :: String,
                             ret :: a,
                             args :: [TypeString],
-                            body :: [AnyCode] } -> Global a
+                            body :: [AnyNode] } -> Global a
 
 data TypeString where
   MkTypeString :: Type tpe => tpe -> Identifier -> TypeString
 showAsArg :: TypeString -> String
-showAsArg (MkTypeString tpe nme) = nme ++ " " ++ showType tpe
+showAsArg (MkTypeString tpe nme) = show nme ++ " " ++ showType tpe
 
 data ArithOp = Plus | Times | Minus | Div deriving (Show, Eq)
 data Cond = Eq | Ne | Sgt | Sge | Slt | Sle deriving (Show, Eq)
 
 data Node a where
-  ArithOp :: Primitive a => Code a -> ArithOp -> Code a -> Node a
-  Comp :: Primitive a => Code a -> Cond -> Code a -> Node Bool
   Const :: Primitive a => a -> Node a
-  Block :: Type a => [AnyCode] -> Code a -> Node a
-  If :: Type a => (Code Bool) -> (Code a) -> (Code a) -> (Node a)
-  Instr :: Type a => String -> Node a
-  Ret :: Type a => Code a -> Node ()
-  Label :: Node ()
+  Block :: Type a => [AnyNode] -> Node a -> Node a
+  Instr :: NonVoid a => String -> Identifier -> Node a
+  VoidInstr :: String -> Node ()
+  Label :: Identifier -> Node ()
 deriving instance Show (Node a)
 
-data Code a where
-  MkCode :: Type a => { node :: Node a, result :: Identifier } -> Code a
-deriving instance Show (Code a)
+data AnyNode where
+  AnyNode :: Type a => Node a -> AnyNode
+instance Show AnyNode where
+  show (AnyNode node) = show node
 
-data AnyCode where 
-  MkAnyCode :: Type a => Code a -> AnyCode
-deriving instance Show AnyCode
+getResult :: NonVoid a => Node a -> Identifier
+getResult (Const val) = showVal val
+getResult (Block nodes node) = getResult node
+getResult (Instr str id) = id
 
 data InstrArg a where
   MkVal :: Type a => a -> InstrArg a
   MkId :: Type a => Identifier -> InstrArg a
-  
-mapAny :: (forall a. Code a -> Code a) -> AnyCode -> AnyCode
-mapAny f (MkAnyCode code) = MkAnyCode $ f code
-
-appAny :: (forall a. Code a -> b) -> AnyCode -> b
-appAny f (MkAnyCode c) = f c
-
-mapNode :: Type b => (Node a -> Node b) -> Code a -> Code b
-mapNode f c = MkCode { node = f (node c), result = result c }
