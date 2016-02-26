@@ -5,24 +5,22 @@ module CodeBuilders (
   buildCode,
   CodeBuilder,
   getId,
-  mkArithOp, mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad, mkComp,
-  mkVoidCode
+  mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad
 ) where
 
 import Text.Printf
 import Control.Monad.State (State, runState, get, put, state)
+import Control.Monad(liftM)
 import LLVMRepresentation
 import Types
 
 type CodeBuilder a = State Integer a
 
-getId :: String -> CodeBuilder String
-getId str = state $ \i -> (str ++ show i, i+1)
+getId :: String -> CodeBuilder Identifier
+getId str = state $ \i -> (Identifier $ str ++ show i, i+1)
 
-buildCode :: Type a => String -> Node a -> CodeBuilder (Code a)
-buildCode nme nod = do
-  idn <- getId nme
-  return (MkCode { node = nod, result = idn })
+buildCode :: Type a => (Identifier -> Node a) -> String -> CodeBuilder (Node a)
+buildCode fn = liftM fn . getId
 
 showOp :: ArithOp -> String
 showOp Plus = "add"
@@ -44,54 +42,31 @@ showCond Sle = "sle"
 showTypedCond :: Type a => a -> Cond -> String
 showTypedCond a cond = printf "icmp %s %s" (showCond cond) (showType a)
 
-showInstrArg :: InstrArg a -> String
-showInstrArg (MkVal v) = showVal v
-showInstrArg (MkId str) = '%':str
+mkRet :: forall a. NonVoid a => InstrArg a -> Node ()
+mkRet arg = VoidInstr $ printf "ret %s %s" (showType (getType::a))
+                                           (showArg arg)
 
-mkVoidCode :: Node () -> Code ()
-mkVoidCode n = MkCode { node = n, result = "" }
+mkBr :: InstrArg Bool -> Identifier -> Identifier -> Node ()
+mkBr arg (Identifier thn) (Identifier els) = VoidInstr $
+  printf "br i1 %s, label %%%s, label %%%s" (showArg arg) thn els
 
-mkArithOp :: forall a b c. (Type a, Type b, Type c) =>
-           Identifier -> ArithOp -> InstrArg b -> InstrArg c -> Node a
-mkArithOp res op arg1 arg2 = MkInstr $
-  printf  "%%%s = %s %s, %s" res
-                             (showTypedOp (getType::a) op)
-                             (showInstrArg arg1)
-                             (showInstrArg arg2)
+mkJmp :: Identifier -> Node ()
+mkJmp (Identifier idn) = VoidInstr $ printf "br label %%%s" idn
 
-mkComp :: forall a. Type a =>
-           Identifier -> Cond -> InstrArg a -> InstrArg a -> Node Bool
-mkComp res cond arg1 arg2 = MkInstr $
-  printf  "%%%s = %s %s, %s" res
-                             (showTypedCond (getType::a) cond)
-                             (showInstrArg arg1)
-                             (showInstrArg arg2)
-
-mkRet :: forall a. Type a => InstrArg a -> Node a
-mkRet arg = MkInstr $ printf "ret %s %s" (showType (getType::a))
-                                         (showInstrArg arg)
-
-mkBr :: InstrArg Bool -> Identifier -> Identifier -> Code ()
-mkBr arg thn els = mkVoidCode $ MkInstr $
-  printf "br i1 %s, label %%%s, label %%%s" (showInstrArg arg) thn els
-
-mkJmp :: Identifier -> Code ()
-mkJmp lbl = mkVoidCode $ MkInstr $ printf "br label %%%s" lbl
-
-mkAlloca :: forall a. Type a => CodeBuilder (Code (Pointer a))
+mkAlloca :: forall a. NonVoid a => CodeBuilder (Node (Pointer a))
 mkAlloca = do
-  allocaId <- getId "alloca"
-  let instr = MkInstr$printf "%%%s = alloca %s" allocaId (showType (getType::a))
-  return $ MkCode { node = instr, result = allocaId }
+  allocaId@(Identifier str) <- getId "alloca"
+  return $ Instr (printf "%%%s = alloca %s" str (showType (getType::a))) allocaId
 
-mkStore :: forall a. Type a => Identifier -> InstrArg a -> Code ()
-mkStore idn arg = mkVoidCode instr where
-  instr = MkInstr $ printf "store %s %s, %s* %s"
-          tpeString (showInstrArg arg) tpeString idn
-  tpeString = showType (getType :: a)
+mkStore :: forall a. Type a => Identifier -> InstrArg a -> Node ()
+mkStore (Identifier idn) arg =
+  VoidInstr $ printf "store %s %s, %s* %s" tpeString (showArg arg) tpeString idn
+  where
+    tpeString = showType (getType :: a)
 
-mkLoad :: forall a. Type a => Identifier -> Identifier -> Code a
-mkLoad ptr load = MkCode { node = instr, result = load } where
-  instr = MkInstr $ printf "%s = load %s, %s* %s"
-          load tpeString tpeString ptr
-  tpeString = showType (getType :: a)
+mkLoad :: forall a. NonVoid a => InstrArg (Pointer a) -> Identifier -> Node a
+mkLoad ptr load@(Identifier lstr) =
+  Instr (printf "%s = load %s, %s %s" lstr valType ptrType $ showArg ptr) $ load
+  where
+    valType = showType (getType :: a)
+    ptrType = showType (getType :: (Pointer a))
