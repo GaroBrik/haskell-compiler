@@ -1,25 +1,28 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module LLVMRepresentation (
   Module(MkModule), decls, globals,
   AnyGlobal(MkAnyGlobal),
   Global(MkFunction), name, ret, body, args,
-  Node(Const, Block, Instr, Label),
+  Node(..),
   ArithOp(Plus, Times, Minus, Div),
   Cond(Eq, Ne, Sgt, Sge, Slt, Sle),
   AnyNode(..),
-  InstrArg(MkVal, MkId), Identifier,
+  InstrArg, getResult, showArg,
+  Identifier(..),
   showAsArg
 ) where
 
 import Types
-import Test.QuickCheck
-newtype Identifier = Identifier String
-instance Show Identifier where
-  show (Identifier str) = str
+import Data.String (IsString)
+
+newtype Identifier = Identifier String deriving (IsString, Show)
+newtype NonVoid a => InstrArg a = InstrArg String deriving (IsString, Show)
 
 data Module = MkModule { decls :: [String],
                          globals :: [AnyGlobal] }
@@ -36,7 +39,7 @@ data Global a where
 data TypeString where
   MkTypeString :: Type tpe => tpe -> Identifier -> TypeString
 showAsArg :: TypeString -> String
-showAsArg (MkTypeString tpe nme) = show nme ++ " " ++ showType tpe
+showAsArg (MkTypeString tpe (Identifier nme)) = nme ++ " " ++ showType tpe
 
 data ArithOp = Plus | Times | Minus | Div deriving (Show, Eq)
 data Cond = Eq | Ne | Sgt | Sge | Slt | Sle deriving (Show, Eq)
@@ -54,12 +57,11 @@ data AnyNode where
 instance Show AnyNode where
   show (AnyNode node) = show node
 
-getResult :: NonVoid a => Node a -> Identifier
-getResult (Const val) = showVal val
+getResult :: NonVoid a => Node a -> InstrArg a
+getResult (Const val) = InstrArg $ showVal val
 getResult (Block _ node) = getResult node
-getResult (Instr _ str) = str
+getResult (Instr _ (Identifier str)) = InstrArg str
 getResult _ = undefined
 
-data InstrArg a where
-  MkVal :: Type a => a -> InstrArg a
-  MkId :: Type a => Identifier -> InstrArg a
+showArg :: InstrArg a -> String
+showArg (InstrArg str) = str
