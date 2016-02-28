@@ -26,9 +26,9 @@ instance CodeGen (Global a) where
         argsString = intercalate "," $ map showAsArg args
         def = printf "define %s @%s(%s) {" (showType ret) name argsString
 
-instance CodeGen AnyCode where
-  codeGen (MkAnyCode c) = codeGen c
+instance CodeGen AnyNode where
+  codeGen (AnyNode c) = codeGen c
 
-instance CodeGen (Code b) where
-  codeGen MkCode { node = MkInstr str } = "  " ++ str
-  codeGen _ = "reduce further"
+instance CodeGen (Node b) where
+  codeGen (Instr str _) = "  " ++ str
+  codeGen otw = show otw
