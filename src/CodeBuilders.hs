@@ -1,26 +1,32 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module CodeBuilders (
   buildCode,
-  CodeBuilder,
+  CodeBuilder, CodeBuilderT, NodeBuilder, NodeBuilderT,
   getId,
-  mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad
+  mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad, mkArithOp, mkCond,
+  mkArithM, mkCondM
 ) where
 
-import Text.Printf
-import Control.Monad.State (State, runState, get, put, state)
-import Control.Monad(liftM)
-import LLVMRepresentation
-import Types
+import           Control.Monad.State (State, StateT, get, put, runState, state)
+import           Data.Maybe          (catMaybes)
+import           LLVMRepresentation
+import           Text.Printf
+import           Types
 
 type CodeBuilder a = State Integer a
+type NodeBuilder a = CodeBuilder (Node a)
+type CodeBuilderT m a = StateT Integer m a
+type NodeBuilderT m a = CodeBuilderT m (Node a)
+-- type NodeBuilder a = CodeBuilder (Node a)
 
 getId :: String -> CodeBuilder Identifier
 getId str = state $ \i -> (Identifier $ str ++ show i, i+1)
 
 buildCode :: Type a => (Identifier -> Node a) -> String -> CodeBuilder (Node a)
-buildCode fn = liftM fn . getId
+buildCode fn = fmap fn . getId
 
 showOp :: ArithOp -> String
 showOp Plus = "add"
@@ -66,7 +72,41 @@ mkStore (Identifier idn) arg =
 
 mkLoad :: forall a. NonVoid a => InstrArg (Pointer a) -> Identifier -> Node a
 mkLoad ptr load@(Identifier lstr) =
-  Instr (printf "%s = load %s, %s %s" lstr valType ptrType $ showArg ptr) $ load
+  Instr (printf "%s = load %s, %s %s" lstr valType ptrType $ showArg ptr) load
   where
     valType = showType (getType :: a)
     ptrType = showType (getType :: (Pointer a))
+
+mkArithOp :: forall a. Arith a => Node a -> ArithOp -> Node a -> NodeBuilder a
+mkArithOp left op right = buildCode code "arith"
+  where code idn@(Identifier idnStr) =
+          Block (map AnyNode $ catMaybes [getCode left, getCode right])
+                (Instr (printf "%s = %s %s, %s %s" idnStr
+                                                   (showOp op)
+                                                   (showType (getType :: a))
+                                                   (showArg $ getResult left)
+                                                   (showArg $ getResult right))
+                 idn)
+
+mkCond :: forall a. Arith a => Node a -> Cond -> Node a -> CodeBuilder (Node Bool)
+mkCond left op right = buildCode code "comp"
+  where code idn@(Identifier idnStr) =
+          Block (map AnyNode $ catMaybes [getCode left, getCode right])
+                (Instr (printf "%s = icmp %s %s, %s %s" idnStr
+                        (showCond op)
+                        (showType (getType :: a))
+                        (showArg $ getResult left)
+                        (showArg $ getResult right))
+                 idn)
+
+mkArithM :: forall a. Arith a => CodeBuilder (Node a) -> ArithOp -> CodeBuilder (Node a) -> CodeBuilder (Node a)
+mkArithM n1 n2 n3 = do
+  n1' <- n1
+  n3' <- n3
+  mkArithOp n1' n2 n3'
+
+mkCondM :: forall a. Arith a => CodeBuilder (Node a) -> Cond -> CodeBuilder (Node a) -> CodeBuilder (Node Bool)
+mkCondM n1 n2 n3 = do
+   n1' <- n1
+   n3' <- n3
+   mkCond n1' n2 n3'
