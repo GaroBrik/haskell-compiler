@@ -1,9 +1,9 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 
 module LLVMRepresentation (
   Module(MkModule), decls, globals,
@@ -18,24 +18,24 @@ module LLVMRepresentation (
   showAsArg
 ) where
 
-import Types
-import Data.String (IsString)
-import Test.QuickCheck (Arbitrary, arbitrary, oneof)
+import           Data.String     (IsString)
+import           Test.QuickCheck (Arbitrary, arbitrary, oneof)
+import           Types
 
 newtype Identifier = Identifier String deriving (IsString, Show)
 newtype NonVoid a => InstrArg a = InstrArg String deriving (IsString, Show)
 
-data Module = MkModule { decls :: [String],
+data Module = MkModule { decls   :: [String],
                          globals :: [AnyGlobal] }
 
 data AnyGlobal where
   MkAnyGlobal :: Type a => Global a -> AnyGlobal
 
 data Global a where
-  MkFunction :: Type a => { name :: String,
-                            ret :: a,
-                            args :: [TypeString],
-                            body :: [AnyNode] } -> Global a
+  MkFunction :: { name :: String,
+                  ret :: a,
+                  args :: [TypeString],
+                  body :: [AnyNode] } -> Global a
 
 data TypeString where
   MkTypeString :: Type tpe => tpe -> Identifier -> TypeString
