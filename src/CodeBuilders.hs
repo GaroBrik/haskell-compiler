@@ -10,6 +10,7 @@ module CodeBuilders (
   mkArithM, mkCondM
 ) where
 
+import           Control.Applicative ((<$>))
 import           Control.Monad.State (State, StateT, get, put, runState, state)
 import           Data.Maybe          (catMaybes)
 import           LLVMRepresentation
@@ -25,7 +26,7 @@ type NodeBuilderT m a = CodeBuilderT m (Node a)
 getId :: String -> CodeBuilder Identifier
 getId str = state $ \i -> (Identifier $ str ++ show i, i+1)
 
-buildCode :: Type a => (Identifier -> Node a) -> String -> CodeBuilder (Node a)
+buildCode :: Type a => (Identifier -> Node a) -> String -> NodeBuilder a
 buildCode fn = fmap fn . getId
 
 showOp :: ArithOp -> String
@@ -64,9 +65,9 @@ mkAlloca = do
   allocaId@(Identifier str) <- getId "alloca"
   return $ Instr (printf "%%%s = alloca %s" str (showType (getType::a))) allocaId
 
-mkStore :: forall a. Type a => Identifier -> InstrArg a -> Node ()
-mkStore (Identifier idn) arg =
-  VoidInstr $ printf "store %s %s, %s* %s" tpeString (showArg arg) tpeString idn
+mkStore :: forall a. Type a => InstrArg (Pointer a) -> InstrArg a -> Node ()
+mkStore idn arg =
+  VoidInstr $ printf "store %s %s, %s* %s" tpeString (showArg arg) tpeString $ showArg idn
   where
     tpeString = showType (getType :: a)
 
@@ -88,7 +89,7 @@ mkArithOp left op right = buildCode code "arith"
                                                    (showArg $ getResult right))
                  idn)
 
-mkCond :: forall a. Arith a => Node a -> Cond -> Node a -> CodeBuilder (Node Bool)
+mkCond :: forall a. Arith a => Node a -> Cond -> Node a -> NodeBuilder Bool
 mkCond left op right = buildCode code "comp"
   where code idn@(Identifier idnStr) =
           Block (map AnyNode $ catMaybes [getCode left, getCode right])
@@ -99,13 +100,46 @@ mkCond left op right = buildCode code "comp"
                         (showArg $ getResult right))
                  idn)
 
-mkArithM :: forall a. Arith a => CodeBuilder (Node a) -> ArithOp -> CodeBuilder (Node a) -> CodeBuilder (Node a)
+mkIf :: forall a. NonVoid a => Node Bool -> Node a -> Node a -> NodeBuilder a
+mkIf cond thn els = do
+  labelIds@[thenId, elseId, endId] <- mapM getId ["then", "else", "end"]
+  let [thenLabel, elseLabel, endLabel] = map (Just . AnyNode . Label) labelIds
+  alloca <- mkAlloca
+  let branch = Just . AnyNode $ mkBr (getResult cond) thenId elseId
+      jump = Just . AnyNode $ mkJmp endId
+      [storeThen, storeElse] =
+        map (Just . AnyNode . mkStore (getResult alloca) . getResult) [thn, els]
+  finalInstr <- buildCode (mkLoad (getResult alloca)) "ifload"
+  return $ Block (catMaybes [AnyNode <$> getCode alloca,
+                             AnyNode <$> getCode cond,
+                             branch, thenLabel, AnyNode <$> getCode thn,
+                             storeThen, jump, elseLabel,
+                             AnyNode <$> getCode els, storeElse,
+                             endLabel])
+                 finalInstr
+
+mkVoidIf :: forall a b. (Type a, Type b) =>
+            Node Bool -> Node a -> Node b -> NodeBuilder ()
+mkVoidIf cond thn els = do
+  labelIds@[thenId, elseId, endId] <- mapM getId ["then", "else", "end"]
+  let [thenLabel, elseLabel, _] = map (Just . AnyNode . Label) labelIds
+  let branch = Just . AnyNode $ mkBr (getResult cond) thenId elseId
+      jump = Just . AnyNode $ mkJmp endId
+  return $ Block (catMaybes [AnyNode <$> getCode cond,
+                             branch, thenLabel, AnyNode <$> getCode thn,
+                             jump, elseLabel, AnyNode <$> getCode els])
+                 (Label endId)
+
+
+mkArithM :: forall a. Arith a =>
+            NodeBuilder a -> ArithOp -> NodeBuilder a -> NodeBuilder a
 mkArithM n1 n2 n3 = do
   n1' <- n1
   n3' <- n3
   mkArithOp n1' n2 n3'
 
-mkCondM :: forall a. Arith a => CodeBuilder (Node a) -> Cond -> CodeBuilder (Node a) -> CodeBuilder (Node Bool)
+mkCondM :: forall a. Arith a =>
+           NodeBuilder a -> Cond -> NodeBuilder a -> NodeBuilder Bool
 mkCondM n1 n2 n3 = do
    n1' <- n1
    n3' <- n3

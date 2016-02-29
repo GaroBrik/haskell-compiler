@@ -1,32 +1,28 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ImpredicativeTypes #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ImpredicativeTypes  #-}
+{-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Transformations (
   compile
 ) where
 
-import LLVMRepresentation
-import Types
-import Data.Maybe (catMaybes)
-import CodeBuilders
-import Control.Monad (liftM, liftM2, liftM3, foldM)
+import           CodeBuilders
+import           Control.Applicative ((<$>))
+import           Control.Monad       (foldM, liftM2)
+import           LLVMRepresentation
+import           Types
 
-type CodeTransformer = forall a. Code a -> CodeBuilder (Code a)
+type CodeTransformer = forall a. Node a -> NodeBuilder a
 
 mapCode :: CodeTransformer -> CodeTransformer
-mapCode fn code = do
-  let re = mapCode fn
-  recursed <- case node code of
-    MkArithOp left op right -> liftM3 MkArithOp (re left) (return op) (re right)
-    MkBlock codes final ->
-      liftM2 MkBlock (mapM (\(MkAnyCode c) -> liftM MkAnyCode $ mapCode fn c) codes)
-                     (re final)
-    MkIf cond thn els -> liftM3 MkIf (mapCode fn cond) (re thn) (re els)
-    MkRet c -> liftM MkRet $ re c
-    _ -> return $ node code
-  fn $ code { node = recursed }
+mapCode fn node = do
+  recursed <- case node of
+    Block codes final ->
+      liftM2 Block (mapM (\(AnyNode n) -> AnyNode <$> mapCode fn n) codes)
+                   (mapCode fn final)
+    _ -> return node
+  fn recursed
 
 -- mapCodeUntyped :: (forall a b. Code a -> Code b) -> Code c -> Code d
 -- mapCodeUntyped fn code = fn $ code { node = recursed }
@@ -37,70 +33,18 @@ mapCode fn code = do
 --           MkIf cond thn els -> MkIf (mapCode fn cond) (re thn) (re els)
 --           _ -> node code
 
-checkForConst :: Type a => Code a -> (Maybe AnyCode, InstrArg a)
-checkForConst MkCode { node = MkConst val } =
-  (Nothing, MkVal val)
-checkForConst otw = (Just $ MkAnyCode otw, MkId $ result otw)
-
-eliminateBinOps :: CodeTransformer
-eliminateBinOps code@(MkCode { node = MkArithOp left op right, result = res }) =
-  return $ code { node = MkBlock (catMaybes [leftCode, rightCode]) instr }
-  where (leftCode, leftRes) = checkForConst left
-        (rightCode, rightRes) = checkForConst right
-        instr = code { node = mkArithOp res op leftRes rightRes }
-eliminateBinOps code@(MkCode { node = MkComp left op right, result = res }) =
-  return $ code { node = MkBlock (catMaybes [leftCode, rightCode]) instr }
-  where (leftCode, leftRes) = checkForConst left
-        (rightCode, rightRes) = checkForConst right
-        instr = code { node = mkComp res op leftRes rightRes }
-eliminateBinOps otw = return otw
-
-eliminateRets :: CodeTransformer
-eliminateRets code@(MkCode { node = MkRet arg }) =
-  return $ code { node = MkBlock (catMaybes [argCode]) instr }
-  where (argCode, argRes) = checkForConst arg
-        instr = code { node = mkRet argRes }
-eliminateRets otw = return otw
-
-eliminateIfs :: forall a. Code a -> CodeBuilder (Code a)
-eliminateIfs code@(MkCode { node = MkIf cond thn els, result = res }) = do
-  thenLabel@(MkCode { result = thenId }) <- buildCode "then" MkLabel
-                                            :: CodeBuilder (Code a)
-  elseLabel@(MkCode { result = elseId }) <- buildCode "else" MkLabel
-                                            :: CodeBuilder (Code a)
-  endLabel@(MkCode { result = endId }) <- buildCode "endIf" MkLabel
-  allocaCode@(MkCode { result = allocaId }) <- mkAlloca
-                                               :: CodeBuilder (Code (Pointer a))
-  let has = hasResult (getType :: a)
-      ifHas = if has then Just else const Nothing
-      (condCode, condRes) = checkForConst cond
-      (thnCode, thnRes) = checkForConst thn
-      (elsCode, elsRes) = checkForConst els
-      branch = Just . MkAnyCode $ mkBr condRes thenId elseId
-      jump = Just . MkAnyCode $ mkJmp endId
-      storeThen = ifHas . MkAnyCode $ mkStore allocaId thnRes
-      storeElse = ifHas .MkAnyCode $ mkStore allocaId elsRes
-      finalInstr = if has then mkLoad res allocaId else endLabel
-      node = MkBlock (catMaybes [condCode, ifHas $ MkAnyCode allocaCode, branch,
-                                 Just $ MkAnyCode thenLabel, thnCode, storeThen,
-                                 jump, Just $ MkAnyCode elseLabel, elsCode,
-                                 storeElse, ifHas $ MkAnyCode endLabel])
-                     finalInstr
-  return code { node = node }
-eliminateIfs otw = return otw
-
-eliminateBlocks :: AnyCode -> [AnyCode]
-eliminateBlocks (MkAnyCode MkCode { node = MkBlock codes code }) =
-  foldl (++) [] . map eliminateBlocks $ codes ++ [MkAnyCode code]
+eliminateBlocks :: AnyNode -> [AnyNode]
+eliminateBlocks (AnyNode (Block codes code )) =
+  concatMap eliminateBlocks $ codes ++ [AnyNode code]
 eliminateBlocks otw = [otw]
 
-transformSequence :: [Code a -> CodeBuilder (Code a)]
+transformSequence :: [Node a -> NodeBuilder a]
 transformSequence =
   let cons = (:) :: CodeTransformer -> [CodeTransformer] -> [CodeTransformer] in
-  map mapCode $ cons eliminateRets
-              $ cons eliminateIfs
-              $ cons eliminateBinOps []
+  map mapCode [] -- $ cons eliminateRets
+              -- $ cons eliminateIfs
+              -- $ cons eliminateBinOps []
 
-compile :: Type a => Code a -> CodeBuilder [AnyCode]
-compile code = liftM (eliminateBlocks . MkAnyCode) $
+compile :: Type a => Node a -> CodeBuilder [AnyNode]
+compile code = (eliminateBlocks . AnyNode) <$>
                foldM (flip ($)) code transformSequence
