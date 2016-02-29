@@ -8,7 +8,7 @@ module CodeBuilders (
   getId,
   mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad,
   mkArithOp, mkCond, mkIf, mkVoidIf,
-  mkArithM, mkCondM
+  mkArithM, mkCondM, mkIfM
 ) where
 
 import           Control.Applicative ((<$>))
@@ -138,3 +138,10 @@ mkCondM n1 n2 n3 = do
    n1' <- n1
    n3' <- n3
    mkCond n1' n2 n3'
+
+mkIfM :: NonVoid a => NodeBuilder Bool -> NodeBuilder a -> NodeBuilder a -> NodeBuilder a
+mkIfM n1 n2 n3 = do
+  n1' <- n1
+  n2' <- n2
+  n3' <- n3
+  mkIf n1' n2' n3'

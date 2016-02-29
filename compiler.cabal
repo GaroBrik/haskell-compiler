@@ -13,7 +13,7 @@ maintainer:          garo.brik@gmail.com
 -- category:            
 build-type:          Simple
 extra-source-files:  README.md
-cabal-version:       >=1.10
+cabal-version:       >=1.22
 
 executable compiler
   main-is:             Main.hs
@@ -21,6 +21,7 @@ executable compiler
   other-extensions:    RankNTypes, ScopedTypeVariables, StandaloneDeriving, GADTs, FlexibleContexts, Rank2Types, ImpredicativeTypes
   build-depends:       QuickCheck >= 2.6
                      , base == 4.*
+                     , hspec >= 2.2.2
                      , mtl >=2.1
                      , process >=1.1
                      , transformers >= 0.4
@@ -35,6 +36,7 @@ test-suite spec
   build-depends:       QuickCheck >= 2.6
                      , base == 4.*
                      , hspec == 2.*
+                     , hspec >= 2.2.2
                      , random >= 1.0.1.1
                      , transformers >= 0.4
   default-language:    Haskell2010

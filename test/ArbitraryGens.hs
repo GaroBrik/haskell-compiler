@@ -3,7 +3,7 @@
 
 module ArbitraryGens (
   arith,
-  cond
+  bool
   ) where
 
 import           CodeBuilders
@@ -12,20 +12,22 @@ import           LLVMRepresentation
 import           Test.QuickCheck
 import           Types
 
-
-arith :: Arith a => Gen (NodeBuilder a)
+arith :: forall a. Arith a => Gen (NodeBuilder a)
 arith = sized tree'
   where tree' 0 = return . Const <$> arbitrary
         tree' n = oneof [return . Const <$> arbitrary,
-                         mkArithM <$> split 2 <*> arbitrary <*> split 2
+                         mkArithM <$> split 2 <*> arbitrary <*> split 2,
+                         mkIfM <$> subBool 3 <*> split 3 <*> split 3
                         ]
           where split m = tree' (n `div` m)
+                subBool m = resize (n `div` m) (bool (getType :: a))
 
-cond :: Gen (NodeBuilder Bool)
-cond = sized tree'
+bool :: forall a. Arith a => a -> Gen (NodeBuilder Bool)
+bool _ = sized tree'
   where tree' 0 = return . Const <$> arbitrary
         tree' n = oneof [return . Const <$> arbitrary,
-                         mkCondM <$> split 2 <*> arbitrary <*> split 2
+                         mkCondM <$> subCond <*> arbitrary <*> subCond,
+                         mkIfM <$> subBool <*> subBool <*> subBool
                         ]
-          where split m = resize (n `div` m)
-                                 (arith :: Gen (NodeBuilder Int))
+          where subCond = resize (n `div` 2) (arith :: Gen (NodeBuilder a))
+                subBool = tree' (n `div` 3)

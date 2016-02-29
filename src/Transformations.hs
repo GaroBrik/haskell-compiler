@@ -45,6 +45,6 @@ transformSequence =
               -- $ cons eliminateIfs
               -- $ cons eliminateBinOps []
 
-compile :: Type a => Node a -> CodeBuilder [AnyNode]
+compile :: Type a => NodeBuilder (Node a) -> CodeBuilder [AnyNode]
 compile code = (eliminateBlocks . AnyNode) <$>
-               foldM (flip ($)) code transformSequence
+               (flip (foldM (flip ($))) transformSequence =<< code)
