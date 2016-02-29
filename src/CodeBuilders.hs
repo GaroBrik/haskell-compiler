@@ -6,12 +6,13 @@ module CodeBuilders (
   buildCode,
   CodeBuilder, CodeBuilderT, NodeBuilder, NodeBuilderT,
   getId,
-  mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad, mkArithOp, mkCond,
+  mkRet, mkBr, mkJmp, mkAlloca, mkStore, mkLoad,
+  mkArithOp, mkCond, mkIf, mkVoidIf,
   mkArithM, mkCondM
 ) where
 
 import           Control.Applicative ((<$>))
-import           Control.Monad.State (State, StateT, get, put, runState, state)
+import           Control.Monad.State (State, StateT, state)
 import           Data.Maybe          (catMaybes)
 import           LLVMRepresentation
 import           Text.Printf
@@ -21,7 +22,6 @@ type CodeBuilder a = State Integer a
 type NodeBuilder a = CodeBuilder (Node a)
 type CodeBuilderT m a = StateT Integer m a
 type NodeBuilderT m a = CodeBuilderT m (Node a)
--- type NodeBuilder a = CodeBuilder (Node a)
 
 getId :: String -> CodeBuilder Identifier
 getId str = state $ \i -> (Identifier $ str ++ show i, i+1)
@@ -35,9 +35,6 @@ showOp Times = "mul"
 showOp Minus = "sub"
 showOp Div = "div"
 
-showTypedOp :: Type a => a -> ArithOp -> String
-showTypedOp a op = printf "%s %s" (showOp op) (showType a)
-
 showCond :: Cond -> String
 showCond Eq = "eq"
 showCond Ne = "ne"
@@ -45,9 +42,6 @@ showCond Sgt = "sgt"
 showCond Sge = "sge"
 showCond Slt = "slt"
 showCond Sle = "sle"
-
-showTypedCond :: Type a => a -> Cond -> String
-showTypedCond a cond = printf "icmp %s %s" (showCond cond) (showType a)
 
 mkRet :: forall a. NonVoid a => InstrArg a -> Node ()
 mkRet arg = VoidInstr $ printf "ret %s %s" (showType (getType::a))
